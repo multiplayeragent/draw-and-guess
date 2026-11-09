@@ -1,0 +1,760 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Draw &amp; Guess</title>
+<style>
+  :root { --bg: #ffe9c7; --ink: #2a2140; --dim: #7a6c93; --card: #fff8ec; --line: #2a214022; --pop: #ff5a6e; --ok: #1fae6a; --sun: #ffb020; }
+  html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: none; }
+  body { background: radial-gradient(800px 500px at 15% 0%, #ffd3e0, transparent 60%), radial-gradient(700px 500px at 100% 100%, #c9e8ff, transparent 60%), var(--bg);
+         color: var(--ink); font: 15px/1.35 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; user-select: none; -webkit-user-select: none; }
+  [hidden] { display: none !important; }
+  #app { position: fixed; inset: 0; display: flex; flex-direction: column; gap: 8px; box-sizing: border-box;
+         padding: max(10px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(10px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left)); }
+  #top { display: flex; align-items: center; gap: 10px; min-height: 44px; }
+  #top h1 { margin: 0; font-size: 19px; font-weight: 900; letter-spacing: .01em; white-space: nowrap; }
+  #word { flex: 1; text-align: center; font-weight: 900; font-size: clamp(18px, 3.4vw, 28px); letter-spacing: .08em; white-space: nowrap; overflow: hidden; }
+  #word .l { display: inline-block; min-width: .8em; border-bottom: 3px solid var(--ink); margin: 0 .08em; text-align: center; line-height: 1.1; }
+  #word .sp { display: inline-block; width: .7em; }
+  #word small { font-size: 13px; letter-spacing: 0; color: var(--dim); font-weight: 700; margin-left: 6px; }
+  #clock { width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; font-weight: 900; background: conic-gradient(var(--sun) var(--p, 100%), #ffffff99 0); box-shadow: inset 0 0 0 4px #fff; }
+  #name { width: 120px; height: 36px; border-radius: 10px; border: 2px solid var(--line); background: #fff; color: var(--ink); padding: 0 10px; font: inherit; font-size: 16px; }
+  #main { flex: 1; min-height: 0; display: flex; gap: 10px; }
+  #stage { flex: 1; min-width: 0; display: flex; align-items: center; justify-content: center; position: relative; }
+  #board { background: #fffdf8; border-radius: 16px; box-shadow: 0 8px 0 #2a214014, 0 0 0 3px #2a21401a; touch-action: none; cursor: crosshair; display: block; }
+  #tools { position: absolute; right: 10px; bottom: 10px; display: flex; gap: 8px; }
+  #tools button, button.go { min-height: 44px; border: 0; border-radius: 12px; padding: 0 16px; font: 800 15px system-ui, sans-serif; cursor: pointer; }
+  #tools button { background: var(--ink); color: #fff; }
+  #banner { position: absolute; inset: 0; display: grid; place-items: center; pointer-events: none; text-align: center; }
+  #banner div { background: #2a2140e6; color: #fff; padding: 16px 22px; border-radius: 16px; font-weight: 900; font-size: clamp(20px, 3.6vw, 32px); max-width: 80%; }
+  #banner small { display: block; font-size: 14px; font-weight: 600; color: #e8defa; margin-top: 6px; }
+  #side { width: 300px; display: flex; flex-direction: column; gap: 8px; min-height: 0; }
+  #players { display: flex; flex-direction: column; gap: 4px; }
+  .p { display: flex; align-items: center; gap: 8px; padding: 5px 10px; border-radius: 12px; background: #ffffffb0; font-weight: 700; font-size: 14px; }
+  .p .av { width: 24px; height: 24px; border-radius: 50%; flex: none; display: grid; place-items: center; font-size: 12px; color: #fff; font-weight: 900; }
+  .p .s { margin-left: auto; font-variant-numeric: tabular-nums; }
+  .p.me { box-shadow: inset 0 0 0 2px var(--sun); } .p.got { background: #c9f5dc; } .p.dr { background: #ffe1a6; }
+  #chat { flex: 1; min-height: 60px; overflow: auto; background: #ffffffb0; border-radius: 12px; padding: 8px 10px; font-size: 14px; display: flex; flex-direction: column; gap: 2px; }
+  #chat b { margin-right: 5px; } #chat .ok { color: var(--ok); font-weight: 800; } #chat .sys { color: var(--dim); font-style: italic; }
+  #say { display: flex; gap: 8px; }
+  #say input { flex: 1; min-width: 0; height: 44px; border-radius: 12px; border: 2px solid var(--line); background: #fff; color: var(--ink); padding: 0 12px; font: inherit; font-size: 16px; }
+  #say button, button.go { background: var(--pop); color: #fff; }
+  #net { font-size: 12px; color: var(--dim); text-align: center; }
+  #fx { position: fixed; inset: 0; pointer-events: none; z-index: 5; }
+  #over { position: fixed; inset: 0; display: grid; place-items: center; background: #2a214080; padding: 16px; }
+  .card { width: min(380px, 92vw); max-height: 92vh; overflow: auto; box-sizing: border-box; background: var(--card); border-radius: 20px; padding: 18px; text-align: center; box-shadow: 0 20px 60px #2a214055; }
+  .card h2 { margin: 0 0 4px; font-size: 26px; } .card ol { text-align: left; padding-left: 26px; margin: 10px 0; font-size: 14px; } .card li span { float: right; }
+  .card h3 { margin: 10px 0 0; font-size: 13px; color: var(--dim); text-transform: uppercase; letter-spacing: .08em; }
+  #oNext { color: var(--dim); font-size: 13px; margin-top: 6px; }
+  @media (max-width: 760px) {
+    #main { flex-direction: column; } #stage { flex: none; } #side { width: auto; flex: 1; }
+    #players { flex-direction: row; flex-wrap: wrap; gap: 4px; } .p { padding: 3px 8px 3px 4px; font-size: 13px; } .p .av { width: 20px; height: 20px; }
+    #top h1 { display: none; } #name { width: 100px; }
+  }
+</style>
+<script src="https://cdn.multiplayeragent.com/sdk/mp.global.js"></script>
+</head>
+<body>
+<div id="app">
+  <div id="top"><h1>Draw &amp; Guess</h1><input id="name" maxlength="14" placeholder="Your name" aria-label="Your name"><div id="word"></div><div id="clock"></div></div>
+  <div id="main">
+    <div id="stage"><canvas id="board"></canvas><div id="tools" hidden><button id="clear">Clear</button></div><div id="banner"></div></div>
+    <div id="side">
+      <div id="players"></div>
+      <div id="chat"></div>
+      <form id="say"><input id="guess" maxlength="40" placeholder="Type your guess…" autocomplete="off" enterkeyhint="send"><button>Send</button></form>
+      <div id="net">Connecting…</div>
+    </div>
+  </div>
+</div>
+<canvas id="fx"></canvas>
+<div id="over" hidden><div class="card">
+  <h2 id="oTitle"></h2><ol id="ranks"></ol>
+  <h3>Best games ever</h3><ol id="board10"><li>Loading the leaderboard…</li></ol>
+  <button class="go" id="again">Play again</button><div id="oNext"></div>
+</div></div>
+<script>
+/* ═══ DRAW & GUESS · a Multiplayer Agent starter ═════════════════════════════════════════
+ * One player draws. Everyone else guesses. Party, 3–10 players; bots fill empty seats.
+ *
+ * WHERE THINGS ARE (search for the "── " headers):
+ *   CONFIG ........ timers, scoring, bots
+ *   WORDS ......... the word list and the bots' doodles (simple line drawings, one per word)
+ *   CONNECTION .... MP_CONNECT, joining, the offline room, who is host
+ *   SEALED SECRETS  the Seal helper: the word is encrypted so only the drawer can read it
+ *   INK ........... how a drawing is packed into short strings and drawn back
+ *   GAME (HOST) ... turns, picking the drawer and the word, hints, checking guesses, scores, bots
+ *   ME ............ drawing (when it's my turn), guessing, opening my word
+ *   SCREEN ........ word bar, board, players, chat, results, leaderboard
+ *
+ * HOW THE MULTIPLAYER WORKS (a relay room: no server code):
+ *   - The game lives in ONE shared field, `game`: {id, v, ph, order, ti, dr, at, endsAt, mask,
+ *     got, scores, word, bots}. Only the HOST writes it (`v` goes up on every write). The host
+ *     is the lowest sessionId among live players (heartbeat seen in the last 3s).
+ *   - The WORD is hidden: the host seals it to the drawer's key in the shared `secret` field,
+ *     so only the drawer can open it (the host picks it, so it knows it too). Everyone else
+ *     sees `mask`: blanks, plus the letters the host reveals as time runs out.
+ *   - The drawer writes its drawing into its OWN entity: d0…d7, each a packed string under
+ *     2048 characters. A bot's drawing goes in shared fields b0…b7 the same way.
+ *   - Guesses are intents: every chat line is sent to the host sealed ("guess"), so nobody
+ *     can read a right answer on the wire. The host scores right ones by time, and writes
+ *     wrong ones to the shared `chat` field for everyone to see.
+ *   - A new host doesn't know the word: the drawer re-sends it, sealed ("word"). If the drawer
+ *     was a bot or left, that turn ends early and the game goes on.
+ *   - ?attract plays offline with bots only (the preview video is recorded from it).
+ *   - Leaderboard "draw-points": each player's best game.
+ */
+
+// ── CONFIG ──────────────────────────────────────────────────────────────────────────
+const CONFIG = {
+  seats: 4,             // bots fill the room up to this many players
+  maxPlayers: 10,
+  rounds: 1,            // each player draws this many times per game
+  turnMs: 60000,        // drawing time per turn
+  revealMs: 5000,       // the word shows between turns
+  lobbyMs: 6000,        // countdown before a game
+  resultsMs: 15000,     // the results screen
+  hintAt: [0.45, 0.65, 0.8], // share of the turn gone when another letter shows (at most half the letters)
+  maxPoints: 500,       // a right guess at once…
+  minPoints: 100,       // …down to this at the buzzer
+  drawerPoints: 80,     // the drawer gets this for every right guess
+  chatLines: 12,        // chat lines kept in state
+  inkChunks: 8,         // fields a drawing may use (each under 2048 characters)
+  pen: 7,               // pen width on the 800×600 board
+  botSkill: 0.7,        // chance a bot gets the word this turn
+  botGuessAt: [0.25, 0.85], // when in the turn a bot guesses right (share of the turn)
+  botDrawShare: 0.55,   // a bot finishes its doodle in this share of the turn
+  board: "draw-points", // leaderboard name
+};
+const BOT_NAMES = ["Doodles", "Picasso", "Scribbles", "Crayon", "Inky", "Sketch", "Pencil", "Mona"];
+const COLORS = ["#ff5a6e", "#3d8bff", "#1fae6a", "#ff9f1c", "#9b5de5", "#00b8b0", "#f15bb5", "#7a8b00", "#e76f51", "#4361ee"];
+
+// ── WORDS ───────────────────────────────────────────────────────────────────────────
+// The bots draw these doodles. Each is a list of strokes in a 0–100 box, built from:
+// L = a line through x,y pairs, C = circle, E = ellipse, A = arc (angles in radians), R = rectangle.
+const PI = Math.PI;
+const L = (...n) => { const p = []; for (let i = 0; i < n.length; i += 2) p.push([n[i], n[i + 1]]); return p; };
+const A = (cx, cy, rx, ry, a0, a1) => Array.from({ length: 19 }, (_, i) => { const a = a0 + ((a1 - a0) * i) / 18; return [cx + Math.cos(a) * rx, cy + Math.sin(a) * ry]; });
+const C = (cx, cy, r) => A(cx, cy, r, r, 0, PI * 2);
+const E = (cx, cy, rx, ry) => A(cx, cy, rx, ry, 0, PI * 2);
+const R = (x, y, w, h) => L(x, y, x + w, y, x + w, y + h, x, y + h, x, y);
+const DOODLES = {
+  sun: [C(50, 50, 18), L(50, 25, 50, 8), L(50, 75, 50, 92), L(25, 50, 8, 50), L(75, 50, 92, 50), L(32, 32, 20, 20), L(68, 32, 80, 20), L(32, 68, 20, 80), L(68, 68, 80, 80)],
+  house: [R(24, 46, 52, 42), L(16, 50, 50, 18, 84, 50), R(44, 64, 14, 24), R(29, 54, 10, 10), R(61, 54, 10, 10)],
+  tree: [L(45, 92, 46, 64), L(55, 92, 54, 64), C(50, 42, 24), A(44, 38, 9, 9, PI, PI * 1.6)],
+  cat: [C(50, 58, 22), L(33, 46, 30, 24, 45, 38), L(55, 38, 70, 24, 67, 46), C(42, 54, 2.5), C(58, 54, 2.5), L(47, 62, 53, 62, 50, 66, 47, 62), L(30, 62, 12, 58), L(30, 66, 12, 70), L(70, 62, 88, 58), L(70, 66, 88, 70)],
+  fish: [E(44, 50, 28, 16), L(70, 50, 90, 34, 90, 66, 70, 50), C(28, 46, 3), A(46, 50, 8, 14, -PI / 2, PI / 2)],
+  car: [L(8, 64, 8, 50, 24, 46, 34, 30, 66, 30, 76, 46, 92, 50, 92, 64, 8, 64), C(28, 66, 9), C(72, 66, 9), L(50, 30, 50, 46), L(30, 46, 76, 46)],
+  flower: [C(50, 32, 7), C(50, 17, 8), C(65, 32, 8), C(50, 47, 8), C(35, 32, 8), L(50, 55, 50, 92), L(50, 76, 66, 64, 52, 70)],
+  apple: [C(50, 58, 28), L(50, 30, 52, 14), L(54, 24, 68, 16, 62, 28, 54, 24)],
+  star: [L(50, 8, 62, 38, 94, 38, 68, 58, 78, 90, 50, 70, 22, 90, 32, 58, 6, 38, 38, 38, 50, 8)],
+  boat: [L(10, 60, 90, 60, 76, 80, 24, 80, 10, 60), L(50, 60, 50, 10), L(52, 14, 82, 54, 52, 54)],
+  heart: [L(50, 84, 18, 52, 12, 34, 22, 20, 38, 18, 50, 32, 62, 18, 78, 20, 88, 34, 82, 52, 50, 84)],
+  moon: [[...A(50, 50, 32, 32, PI / 2, PI * 1.5), ...A(62, 50, 34, 34, -1.93, -4.35)], C(40, 40, 3), C(36, 60, 4)],
+  cloud: [A(32, 56, 14, 14, PI / 2, PI * 1.5), A(52, 42, 20, 20, PI * 1.05, PI * 1.95), A(70, 54, 14, 14, -PI / 2, PI / 2), L(70, 68, 32, 70)],
+  snowman: [C(50, 70, 20), C(50, 38, 13), C(45, 35, 1.8), C(55, 35, 1.8), L(50, 39, 61, 41, 50, 43), L(34, 64, 18, 50), L(66, 64, 82, 50), L(38, 26, 62, 26), R(42, 12, 16, 14)],
+  umbrella: [[...A(50, 50, 38, 34, PI, PI * 2), ...L(88, 50, 75, 46, 63, 50, 50, 46, 37, 50, 25, 46, 12, 50)], L(50, 48, 50, 84, 44, 90, 38, 84)],
+  rocket: [L(50, 8, 64, 30, 64, 72, 36, 72, 36, 30, 50, 8), C(50, 42, 6), L(36, 56, 24, 76, 36, 72), L(64, 56, 76, 76, 64, 72), L(44, 74, 50, 92, 56, 74)],
+  ghost: [[...L(28, 86, 28, 42), ...A(50, 42, 22, 22, PI, PI * 2), ...L(72, 42, 72, 86, 65, 79, 58, 86, 50, 79, 42, 86, 35, 79, 28, 86)], C(42, 44, 3), C(58, 44, 3), E(50, 58, 4, 6)],
+  key: [C(28, 50, 13), C(28, 50, 4), L(41, 50, 88, 50, 88, 62), L(74, 50, 74, 60)],
+  glasses: [C(31, 52, 14), C(69, 52, 14), A(50, 53, 6, 4, PI, PI * 2), L(17, 48, 6, 40), L(83, 48, 94, 40)],
+  "ice cream": [L(32, 48, 50, 92, 68, 48, 32, 48), A(50, 46, 19, 19, PI, PI * 2), L(38, 60, 58, 56), L(42, 70, 56, 66)],
+  mushroom: [[...A(50, 52, 36, 30, PI, PI * 2), ...L(86, 52, 14, 52)], L(42, 52, 40, 86, 60, 86, 58, 52), C(38, 38, 5), C(60, 34, 6), C(72, 46, 3)],
+  snail: [C(56, 50, 22), A(57, 51, 12, 12, 0, PI * 1.6), L(14, 72, 90, 72), L(22, 72, 18, 46), L(18, 46, 12, 36), L(18, 46, 24, 36)],
+  cup: [L(28, 30, 32, 80, 64, 80, 68, 30, 28, 30), A(68, 54, 12, 14, -PI / 2, PI / 2), L(40, 24, 44, 16, 40, 8), L(54, 24, 58, 16, 54, 8)],
+  balloon: [E(50, 38, 22, 27), L(50, 65, 46, 70, 54, 70, 50, 65), L(50, 70, 44, 80, 54, 88, 47, 96)],
+  pizza: [L(14, 20, 86, 20, 50, 92, 14, 20), A(50, 20, 38, 8, PI, PI * 2), C(42, 34, 5), C(58, 42, 5), C(50, 60, 4)],
+  spider: [C(50, 50, 12), C(50, 32, 7), L(40, 44, 22, 34, 14, 46), L(40, 50, 18, 50, 10, 62), L(42, 56, 24, 66, 18, 80), L(60, 44, 78, 34, 86, 46), L(60, 50, 82, 50, 90, 62), L(58, 56, 76, 66, 82, 80), L(50, 25, 50, 8)],
+};
+// People can also get these (no doodle, so the bots never draw them).
+const MORE_WORDS = ["guitar", "robot", "castle", "dragon", "rainbow", "pirate", "volcano", "penguin", "banana", "bicycle", "crown", "octopus", "cactus", "kite",
+  "lighthouse", "sandwich", "dinosaur", "butterfly", "camera", "candle", "anchor", "igloo", "pumpkin", "hamburger", "tent", "clock", "train", "bridge", "elephant"];
+const WORDS = [...Object.keys(DOODLES), ...MORE_WORDS];
+const SILLY = ["a blob?", "potato", "dog", "hmm…", "lamp", "a hat?", "spaghetti", "is it a bird", "ufo", "broccoli"];
+
+// ── CONNECTION ──────────────────────────────────────────────────────────────────────
+// The builder fills these in for this game. Downloaded from GitHub? Put your own pk_ key here.
+const MP_CONNECT = {
+  key: 'pk_REPLACE_ME',
+  room: 'draw-and-guess',
+  endpoint: 'wss://live.multiplayeragent.com',
+  apiUrl: 'https://api.multiplayeragent.com',
+};
+const ATTRACT = new URLSearchParams(location.search).has("attract");
+
+/** Same shape as the SDK client, kept in this tab: offline play and ?attract. */
+function localRoom() {
+  const id = "local", state = { entities: { players: { [id]: {} } }, shared: {} }, subs = [];
+  let queued = false;
+  const emit = () => { if (!queued) { queued = true; queueMicrotask(() => { queued = false; subs.forEach((f) => f(state)); }); } };
+  const put = (o, k, v) => { if (typeof k === "object") Object.assign(o, k); else o[k] = v; emit(); };
+  return {
+    sessionId: id, state, offline: true,
+    me: { set: (k, v) => put(state.entities.players[id], k, v) },
+    setShared: (k, v) => put(state.shared, k, v),
+    onState: (f) => { subs.push(f); f(state); }, onJoin() {}, onLeave() {}, on() {}, send() {},
+    onDisconnect() {}, onReconnect() {}, leave: async () => {},
+  };
+}
+async function connect() {
+  if (ATTRACT || typeof MP === "undefined") return localRoom();
+  try {
+    const mp = await Promise.race([MP.join({ ...MP_CONNECT }), new Promise((_, no) => setTimeout(() => no(new Error("timed out")), 10000))]);
+    window.mp = mp; // the builder calls window.mp.leave() when the page closes
+    return mp;
+  } catch (e) {
+    console.warn("Playing offline:", e && e.message);
+    return localRoom();
+  }
+}
+const parse = (v, fb) => { if (typeof v !== "string") return fb; try { return JSON.parse(v); } catch { return fb; } };
+let net = null, S = { entities: { players: {} }, shared: {} };
+const seenHb = new Map();
+function livePlayers() {
+  const now = performance.now(), out = [];
+  for (const [id, p] of Object.entries(S.entities.players || {})) {
+    const s = seenHb.get(id);
+    if (!s || s.hb !== p.hb) seenHb.set(id, { hb: p.hb, at: now });
+    if (id === net.sessionId || now - seenHb.get(id).at < 3000) out.push(id);
+  }
+  return out.sort();
+}
+const isHost = () => livePlayers()[0] === net.sessionId;
+const humans = () => livePlayers().filter((id) => !(ATTRACT && id === net.sessionId));
+const pkOf = (id) => (id === net.sessionId ? Seal.pub : S.entities.players?.[id]?.pk);
+
+// ── SEALED SECRETS ──────────────────────────────────────────────────────────────────
+// Hidden info in a relay room. Everything in room state reaches every client, so a secret
+// (the word to draw) is written SEALED: encrypted so only its one reader can open it. Each
+// player publishes a public key in its own entity (`pk`); the host seals the word to the
+// drawer's key and writes the box into the shared `secret` field.
+//   - The host picks the word, so the host can read it. Fine for friends, not cheat-proof.
+//   - A new host can't open boxes the old host sealed: the drawer re-sends its word to the
+//     new host (sealed, with mp.send).
+//   - crypto.subtle needs https or localhost. Without it seal()/open() pass the value through.
+const b64 = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf)));
+const unb64 = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
+const Seal = {
+  pair: null,
+  pub: "",
+  keys: new Map(), // other player's public key -> derived AES key
+  get on() { return !!(window.crypto && crypto.subtle); },
+  /** Make this player's key pair. Returns the public key to publish: me.set("pk", pub). */
+  async init() {
+    if (!this.on) return "";
+    this.pair = await crypto.subtle.generateKey({ name: "ECDH", namedCurve: "P-256" }, false, ["deriveKey"]);
+    this.pub = b64(await crypto.subtle.exportKey("raw", this.pair.publicKey));
+    return this.pub;
+  },
+  async key(otherPub) {
+    let k = this.keys.get(otherPub);
+    if (!k) {
+      const theirs = await crypto.subtle.importKey("raw", unb64(otherPub), { name: "ECDH", namedCurve: "P-256" }, false, []);
+      k = await crypto.subtle.deriveKey({ name: "ECDH", public: theirs }, this.pair.privateKey, { name: "AES-GCM", length: 128 }, false, ["encrypt", "decrypt"]);
+      this.keys.set(otherPub, k);
+    }
+    return k;
+  },
+  /** Seal any JSON value so only the holder of `toPub` (and you) can open it. */
+  async seal(toPub, value) {
+    if (!this.on || !toPub || !this.pair) return "p:" + JSON.stringify(value);
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const ct = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, await this.key(toPub), new TextEncoder().encode(JSON.stringify(value)));
+    return b64(iv) + "." + b64(ct);
+  },
+  /** Open a box sealed by the player whose public key is `fromPub`. Null if it isn't for you. */
+  async open(fromPub, box) {
+    if (typeof box !== "string") return null;
+    if (box.startsWith("p:")) return JSON.parse(box.slice(2));
+    if (!this.on || !fromPub || !this.pair) return null;
+    try {
+      const [iv, ct] = box.split(".").map(unb64);
+      const pt = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, await this.key(fromPub), ct);
+      return JSON.parse(new TextDecoder().decode(pt));
+    } catch { return null; }
+  },
+};
+
+// ── INK ─────────────────────────────────────────────────────────────────────────────
+// A drawing is one string: "|" + color + width starts a stroke, then 4 characters per point
+// (x and y on the 800×600 board, 2 characters each). It is split into chunks under 2048
+// characters, each starting with "g<game>.<turn>.<clears>~" so old chunks are ignored.
+const BW = 800, BH = 600, CHUNK = 1850, INK_COLORS = ["#2a2140"];
+const ENC = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_", DEC = Object.fromEntries([...ENC].map((c, i) => [c, i]));
+const enc2 = (n) => { n = Math.max(0, Math.min(4095, Math.round(n))); return ENC[n >> 6] + ENC[n & 63]; };
+const encPoint = (x, y) => enc2(Math.min(BW - 1, x)) + enc2(Math.min(BH - 1, y));
+function decodeInk(s) {
+  const out = [];
+  let cur = null;
+  for (let i = 0; i < s.length;) {
+    if (s[i] === "|") { cur = { c: DEC[s[i + 1]] || 0, w: DEC[s[i + 2]] || CONFIG.pen, pts: [] }; out.push(cur); i += 3; continue; }
+    if (!cur || i + 4 > s.length) break;
+    cur.pts.push([DEC[s[i]] * 64 + DEC[s[i + 1]], DEC[s[i + 2]] * 64 + DEC[s[i + 3]]]);
+    i += 4;
+  }
+  return out;
+}
+/** Write a drawing into fields `<name>0…7` with `set`, only the chunks that changed. */
+function writeInk(set, name, prefix, ink, sent) {
+  const n = Math.max(1, Math.ceil(ink.length / CHUNK));
+  for (let i = 0; i < n; i++) {
+    const v = prefix + ink.slice(i * CHUNK, (i + 1) * CHUNK);
+    if (sent[i] !== v) { sent[i] = v; set(name + i, v); }
+  }
+}
+/** The drawer's drawing as the room has it ("" until it starts this turn). */
+function inkOf(g) {
+  const bot = isBot(g, g.dr), get = (i) => (bot ? S.shared["b" + i] : S.entities.players?.[g.dr]?.["d" + i]);
+  const first = get(0);
+  if (typeof first !== "string" || !first.startsWith(`g${g.id}.${g.ti}.`)) return "";
+  const pre = first.slice(0, first.indexOf("~") + 1);
+  let ink = "";
+  for (let i = 0; i < CONFIG.inkChunks; i++) { const v = get(i); if (typeof v !== "string" || !v.startsWith(pre)) break; ink += v.slice(pre.length); }
+  return ink;
+}
+/** A bot's doodle as ink: scaled onto the board, a little wobbly, points every ~9px. */
+function doodleInk(word) {
+  const s = 4.6 + Math.random() * 0.6, rot = (Math.random() - 0.5) * 0.16, ox = BW / 2 + (Math.random() - 0.5) * 60, oy = BH / 2 + (Math.random() - 0.5) * 30;
+  const at = ([x, y]) => { const dx = (x - 50) * s, dy = (y - 50) * s; return [ox + dx * Math.cos(rot) - dy * Math.sin(rot), oy + dx * Math.sin(rot) + dy * Math.cos(rot)]; };
+  let ink = "";
+  for (const stroke of DOODLES[word] || [C(50, 50, 30)]) {
+    ink += "|" + ENC[0] + ENC[CONFIG.pen];
+    const pts = stroke.map(at);
+    for (let i = 0; i < pts.length; i++) {
+      const [x, y] = pts[i], [nx, ny] = pts[i + 1] || pts[i], n = Math.max(1, Math.ceil(Math.hypot(nx - x, ny - y) / 9));
+      for (let k = 0; k < (i === pts.length - 1 ? 1 : n); k++) ink += encPoint(x + ((nx - x) * k) / n + (Math.random() - 0.5) * 2, y + ((ny - y) * k) / n + (Math.random() - 0.5) * 2);
+    }
+  }
+  return ink;
+}
+
+// ── GAME (HOST) ─────────────────────────────────────────────────────────────────────
+const host = { last: null, was: false, word: null, botInk: null, sentB: [], plan: null, used: new Set(), chat: { g: 0, l: [] }, graceUntil: 0, busy: false, lastInk: 0 };
+let heardWord = null; // a word the drawer re-sent to me, in case I become host: {t, w}
+
+function game() {
+  const g = parse(S.shared.game, null);
+  return host.last && isHost() && (!g || host.last.v > g.v) ? host.last : g;
+}
+function writeGame(g) { g = { ...g, v: (game()?.v ?? 0) + 1 }; host.last = g; net.setShared("game", JSON.stringify(g)); return g; }
+const patch = (changes) => writeGame({ ...game(), ...changes });
+const newGame = (id) => ({ id, ph: "lobby", at: Date.now(), endsAt: Date.now() + CONFIG.lobbyMs, order: [], ti: -1, dr: "", mask: "", got: {}, scores: {}, word: "", why: "", bots: [], ready: [] });
+const turnKey = (g) => `${g.id}.${g.ti}`;
+const isBot = (g, id) => !!g && g.bots.some((b) => b.i === id);
+const nameIn = (g, id) => (id === net.sessionId ? myName : g && g.bots.find((b) => b.i === id)?.n) || String(S.entities.players?.[id]?.n ?? "Player").slice(0, 14);
+const colorIn = (g, id) => (id === net.sessionId ? myColor : g && g.bots.find((b) => b.i === id)?.c) || S.entities.players?.[id]?.c || "#999";
+const rnd = (a, b) => a + Math.random() * (b - a);
+const pick = (a) => a[Math.floor(Math.random() * a.length)];
+const shuffle = (a) => { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+const maskOf = (word, shown) => [...word].map((ch, i) => (ch === " " ? " " : shown.includes(i) ? ch : "_")).join("");
+const squash = (s) => String(s).toLowerCase().replace(/[^a-z]/g, "");
+const isRight = (text, word) => !!word && squash(text).includes(squash(word));
+
+/** Become host: carry on from state. The word comes back from the drawer, or the turn ends. */
+function adopt() {
+  host.was = true; host.last = null; host.plan = null; host.botInk = null; host.sentB = []; host.word = null;
+  host.graceUntil = performance.now() + 2500;
+  const g = game();
+  host.chat = parse(S.shared.chat, { g: 0, l: [] });
+  if (!g || g.ph !== "turn") return;
+  if (myWord && myWord.t === turnKey(g)) host.word = myWord.w;
+  else if (heardWord && heardWord.t === turnKey(g)) host.word = heardWord.w;
+  if (!net.offline) net.send("who", { t: turnKey(g) });
+}
+
+function hostTick() {
+  if (!host.was) adopt();
+  const t = Date.now();
+  let g = game();
+  if (!g) g = writeGame(newGame(1));
+  if (g.ph === "lobby" && t >= g.endsAt) startGame(g);
+  else if (g.ph === "turn") turnTick(g, t);
+  else if (g.ph === "reveal" && t >= g.endsAt) nextTurn(g);
+  else if (g.ph === "results" && t >= g.endsAt) writeGame(newGame(g.id + 1));
+}
+
+function startGame(g) {
+  const hs = humans().slice(0, CONFIG.maxPlayers), names = shuffle([...BOT_NAMES]), used = new Set(hs.map((id) => colorIn(g, id)));
+  const free = COLORS.filter((c) => !used.has(c));
+  const bots = Array.from({ length: Math.max(0, CONFIG.seats - hs.length) }, (_, k) => ({ i: "bot" + (k + 1), n: names[k % names.length], c: free[k % free.length] || COLORS[k] }));
+  host.used = new Set();
+  host.chat = { g: g.id, l: [] };
+  nextTurn(patch({ ph: "reveal", order: shuffle([...hs, ...bots.map((b) => b.i)]), bots, ti: -1, scores: {}, got: {} }));
+}
+
+/** The next drawer still here, a fresh word sealed to them, and the clock starts. */
+async function nextTurn(g) {
+  if (host.busy) return;
+  host.busy = true;
+  try {
+    let ti = g.ti, dr = "";
+    while (++ti < g.order.length * CONFIG.rounds) { const id = g.order[ti % g.order.length]; if (isBot(g, id) || S.entities.players?.[id]) { dr = id; break; } }
+    if (!dr) { patch({ ph: "results", endsAt: Date.now() + CONFIG.resultsMs, word: "", ready: [] }); return; }
+    const bot = isBot(g, dr), pool = (bot ? Object.keys(DOODLES) : WORDS).filter((w) => !host.used.has(w)), word = pick(pool.length ? pool : WORDS);
+    const t = `${g.id}.${ti}`, box = bot ? "" : await Seal.seal(pkOf(dr), { t, w: word });
+    const now = game();
+    if (!isHost() || !now || now.id !== g.id || now.ti !== g.ti || now.ph === "turn") return; // the room moved on while we sealed
+    host.used.add(word); host.word = word; host.plan = null; host.sentB = [];
+    host.botInk = bot ? doodleInk(word) : null;
+    net.setShared("secret", JSON.stringify({ t, pk: Seal.pub, box }));
+    patch({ ph: "turn", ti, dr, at: Date.now(), endsAt: Date.now() + CONFIG.turnMs, mask: maskOf(word, []), got: {}, word: "", why: "" });
+    say("", `${nameIn(g, dr)} is drawing now`, "sys");
+  } finally { host.busy = false; }
+}
+
+function turnTick(g, t) {
+  const settled = performance.now() >= host.graceUntil;
+  if (!host.word) { if (settled) endTurn(g, "lost"); return; }
+  if (host.botInk) drawForBot(g, t);
+  // hints: another letter at each step, never more than half of them
+  const letters = [...host.word].map((c, i) => (c === " " ? -1 : i)).filter((i) => i >= 0);
+  const shown = [...g.mask].map((c, i) => (c !== "_" && c !== " " ? i : -1)).filter((i) => i >= 0);
+  const want = Math.min(CONFIG.hintAt.filter((f) => t >= g.at + f * CONFIG.turnMs).length, Math.floor(letters.length / 2));
+  if (shown.length < want) g = patch({ mask: maskOf(host.word, [...shown, pick(letters.filter((i) => !shown.includes(i)))]) });
+  botGuesses(g, t);
+  g = game();
+  const guessers = [...humans(), ...g.bots.map((b) => b.i)].filter((id) => id !== g.dr);
+  const drawerGone = !isBot(g, g.dr) && !S.entities.players?.[g.dr];
+  if (t >= g.endsAt || drawerGone || (guessers.length && guessers.every((id) => g.got[id]))) endTurn(g, drawerGone ? "left" : "");
+}
+function endTurn(g, why) {
+  if (host.botInk) drawForBot(g, Date.now(), true);
+  patch({ ph: "reveal", endsAt: Date.now() + CONFIG.revealMs, word: host.word || "", why });
+  host.word = null; host.botInk = null;
+}
+
+/** A chat line from anyone (opened from its seal). Right answers score; wrong ones are shown. */
+function onGuess(from, text) {
+  const g = game();
+  text = String(text || "").replace(/\s+/g, " ").trim().slice(0, 40);
+  if (!g || !text) return;
+  if (g.ph === "turn" && !host.word) return; // a new host still waiting for the word: show nothing that might be it
+  if (g.ph === "turn" && host.word) {
+    if (from === g.dr || g.got[from]) return; // they know the word: nothing they type is shown
+    if (isRight(text, host.word)) {
+      const left = Math.max(0, g.endsAt - Date.now()) / CONFIG.turnMs;
+      const pts = Math.round((CONFIG.minPoints + (CONFIG.maxPoints - CONFIG.minPoints) * left) / 5) * 5, sc = { ...g.scores };
+      sc[from] = (sc[from] || 0) + pts; sc[g.dr] = (sc[g.dr] || 0) + CONFIG.drawerPoints;
+      patch({ got: { ...g.got, [from]: pts }, scores: sc });
+      say(from, "guessed the word!", "ok");
+      return;
+    }
+  }
+  say(from, text, "");
+}
+function say(from, text, kind) {
+  const g = game();
+  if (host.chat.g !== g.id) host.chat = { g: g.id, l: [] };
+  host.chat.l = [...host.chat.l, [from ? nameIn(g, from) : "", from ? colorIn(g, from) : "", text, kind]].slice(-CONFIG.chatLines);
+  net.setShared("chat", JSON.stringify(host.chat));
+}
+function onReady(from) {
+  const g = game();
+  if (!g || g.ph !== "results" || g.ready.includes(from)) return;
+  const ready = [...g.ready, from];
+  patch({ ready, endsAt: humans().every((id) => ready.includes(id)) ? Math.min(g.endsAt, Date.now() + 1500) : g.endsAt });
+}
+
+// Bots: a bot drawer reveals its doodle bit by bit; bot guessers guess at planned times.
+function drawForBot(g, t, all) {
+  if (!all && t - host.lastInk < 150) return; // ~6 writes a second
+  host.lastInk = t;
+  const share = all ? 1 : Math.min(1, (t - g.at) / (CONFIG.turnMs * CONFIG.botDrawShare));
+  writeInk((k, v) => net.setShared(k, v), "b", `g${g.id}.${g.ti}.0~`, host.botInk.slice(0, Math.floor(host.botInk.length * share)), host.sentB);
+}
+function botGuesses(g, t) {
+  if (!host.plan || host.plan.key !== turnKey(g)) {
+    const acts = [];
+    for (const b of g.bots) {
+      if (b.i === g.dr) continue;
+      const right = Math.random() < CONFIG.botSkill, at = g.at + rnd(...CONFIG.botGuessAt) * CONFIG.turnMs;
+      for (let k = Math.floor(rnd(1, 3.5)); k > 0; k--) acts.push({ i: b.i, at: g.at + rnd(0.12, 0.95) * ((right ? at : g.endsAt) - g.at), w: pick(Math.random() < 0.6 ? WORDS.filter((w) => w !== host.word) : SILLY) });
+      if (right) acts.push({ i: b.i, at, w: host.word });
+    }
+    host.plan = { key: turnKey(g), acts };
+  }
+  const blank = !isBot(g, g.dr) && inkOf(g).length < 120; // nothing drawn yet: nothing to guess from
+  for (const a of host.plan.acts) {
+    if (a.done || t < a.at) continue;
+    if (blank && a.w === host.word) { a.at += 2000; continue; }
+    a.done = true; onGuess(a.i, a.w);
+  }
+}
+
+// ── ME ──────────────────────────────────────────────────────────────────────────────
+let myName = "", myColor = COLORS[0], myWord = null, opening = false, myGot = "";
+try { myName = localStorage.getItem("mpa-name") || ""; } catch {}
+if (!myName) myName = pick(["Sunny", "Pip", "Biscuit", "Maple", "Pickle", "Wren", "Taco", "Echo"]) + " " + (10 + Math.floor(Math.random() * 90));
+const mine = { ink: "", turn: "", clears: 0, sent: [], lastSend: 0, drawing: false, last: null };
+
+/** My turn to draw: reset the ink, and open the sealed word. */
+function myTick(g) {
+  if (g.ph === "turn" && g.dr === net.sessionId && mine.turn !== turnKey(g)) { mine.turn = turnKey(g); mine.ink = ""; mine.clears = 0; mine.sent = []; publishInk(true); }
+  const sec = parse(S.shared.secret, null);
+  if (g.ph === "turn" && g.dr === net.sessionId && sec && sec.t === turnKey(g) && myWord?.t !== sec.t && !opening) {
+    opening = true;
+    Seal.open(sec.pk, sec.box).then((v) => { if (v && v.t === sec.t) myWord = v; }).finally(() => { opening = false; });
+  }
+  if (myGot && !(g.ph === "turn" && g.got[net.sessionId])) myGot = "";
+  if (g.ph === "turn" && g.dr === net.sessionId) publishInk(false);
+}
+const iDraw = (g) => !!g && g.ph === "turn" && g.dr === net.sessionId && !ATTRACT;
+function publishInk(force) {
+  const g = game(), now = performance.now();
+  if (!g || (!force && now - mine.lastSend < 120)) return;
+  mine.lastSend = now;
+  writeInk((k, v) => net.me.set(k, v), "d", `g${g.id}.${g.ti}.${mine.clears}~`, mine.ink, mine.sent);
+}
+function boardPoint(e) { const r = board.getBoundingClientRect(); return [((e.clientX - r.left) / r.width) * BW, ((e.clientY - r.top) / r.height) * BH]; }
+const full = () => mine.ink.length > CHUNK * CONFIG.inkChunks - 8;
+function penDown(e) {
+  if (!iDraw(game()) || full()) return;
+  e.preventDefault(); board.setPointerCapture(e.pointerId);
+  const [x, y] = boardPoint(e);
+  mine.drawing = true; mine.last = [x, y];
+  mine.ink += "|" + ENC[0] + ENC[CONFIG.pen] + encPoint(x, y);
+}
+function penMove(e) {
+  if (!mine.drawing || !iDraw(game())) return;
+  for (const ev of e.getCoalescedEvents ? e.getCoalescedEvents() : [e]) {
+    const [x, y] = boardPoint(ev);
+    if (Math.hypot(x - mine.last[0], y - mine.last[1]) < 4 || full()) continue;
+    mine.ink += encPoint(x, y); mine.last = [x, y];
+  }
+}
+function penUp() { if (mine.drawing) { mine.drawing = false; publishInk(true); } }
+function clearBoard() {
+  if (!iDraw(game())) return;
+  mine.ink = ""; mine.clears++; mine.sent = [];
+  publishInk(true);
+}
+/** Every chat line goes to the host sealed, so a right answer never crosses the wire in plain. */
+async function sendGuess(text) {
+  if (isHost()) return onGuess(net.sessionId, text);
+  const to = livePlayers()[0], pk = pkOf(to);
+  if (pk) net.send("guess", { to, box: await Seal.seal(pk, { w: text }) });
+}
+/** When the host changes, the drawer hands the word to the new one, sealed. */
+let lastHost = "";
+function watchHost() {
+  const h = livePlayers()[0];
+  if (h === lastHost) return;
+  lastHost = h;
+  if (h && h !== net.sessionId) resendWord(h);
+}
+async function resendWord(to) {
+  const g = game(), pk = pkOf(to);
+  if (g && g.ph === "turn" && g.dr === net.sessionId && myWord?.t === turnKey(g) && pk && !net.offline) net.send("word", { to, box: await Seal.seal(pk, myWord) });
+}
+
+// ── SCREEN ──────────────────────────────────────────────────────────────────────────
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+const board = $("board"), bctx = board.getContext("2d"), fx = $("fx"), fctx = fx.getContext("2d");
+let DPR = 1, drawnKey = "";
+function fit() {
+  DPR = Math.min(2, devicePixelRatio || 1);
+  const st = $("stage"), narrow = innerWidth <= 760;
+  const w = narrow ? st.parentElement.clientWidth : st.clientWidth, h = narrow ? innerHeight * 0.46 : st.clientHeight;
+  const bw = Math.floor(Math.min(w, (h * BW) / BH)), bh = Math.floor((bw * BH) / BW);
+  board.style.width = bw + "px"; board.style.height = bh + "px"; board.width = bw * DPR; board.height = bh * DPR;
+  if (narrow) st.style.height = bh + "px"; else st.style.height = "";
+  fx.width = innerWidth * DPR; fx.height = innerHeight * DPR; fx.style.width = innerWidth + "px"; fx.style.height = innerHeight + "px";
+  drawnKey = "";
+}
+addEventListener("resize", fit); addEventListener("orientationchange", fit);
+
+/** Draw the current drawing onto the board (only when it changed). */
+function drawBoard(ink) {
+  const key = ink + "@" + board.width;
+  if (key === drawnKey) return;
+  drawnKey = key;
+  const k = board.width / BW;
+  bctx.setTransform(1, 0, 0, 1, 0, 0); bctx.clearRect(0, 0, board.width, board.height);
+  bctx.setTransform(k, 0, 0, k, 0, 0); bctx.lineCap = bctx.lineJoin = "round";
+  for (const s of decodeInk(ink)) {
+    const p = s.pts;
+    if (!p.length) continue;
+    bctx.strokeStyle = INK_COLORS[s.c] || INK_COLORS[0]; bctx.lineWidth = s.w;
+    bctx.beginPath(); bctx.moveTo(p[0][0], p[0][1]);
+    if (p.length === 1) bctx.lineTo(p[0][0] + 0.1, p[0][1]);
+    for (let i = 1; i < p.length - 1; i++) bctx.quadraticCurveTo(p[i][0], p[i][1], (p[i][0] + p[i + 1][0]) / 2, (p[i][1] + p[i + 1][1]) / 2);
+    if (p.length > 1) bctx.lineTo(p[p.length - 1][0], p[p.length - 1][1]);
+    bctx.stroke();
+  }
+}
+
+let AC = null;
+function unlockAudio() { if (!AC && !ATTRACT) try { AC = new AudioContext(); } catch {} }
+function tone(f, ms, type = "sine", vol = 0.05) {
+  if (!AC) return;
+  const o = AC.createOscillator(), gn = AC.createGain(), t = AC.currentTime;
+  o.type = type; o.frequency.value = f; gn.gain.setValueAtTime(vol, t); gn.gain.exponentialRampToValueAtTime(0.0001, t + ms / 1000);
+  o.connect(gn).connect(AC.destination); o.start(t); o.stop(t + ms / 1000);
+}
+const confetti = [];
+function popConfetti(x, y, n) { for (let i = 0; i < n; i++) confetti.push({ x, y, vx: rnd(-260, 260), vy: rnd(-420, -120), life: 1, c: pick(COLORS), r: rnd(0, 6) }); }
+function drawFx(dt) {
+  fctx.setTransform(DPR, 0, 0, DPR, 0, 0); fctx.clearRect(0, 0, innerWidth, innerHeight);
+  for (let i = confetti.length - 1; i >= 0; i--) {
+    const p = confetti[i]; p.vy += 700 * dt; p.x += p.vx * dt; p.y += p.vy * dt; p.r += dt * 8; p.life -= dt * 0.7;
+    if (p.life <= 0) { confetti.splice(i, 1); continue; }
+    fctx.save(); fctx.translate(p.x, p.y); fctx.rotate(p.r); fctx.globalAlpha = Math.min(1, p.life * 2); fctx.fillStyle = p.c; fctx.fillRect(-5, -3, 10, 6); fctx.restore();
+  }
+}
+/** Effects for what just changed in state: nothing here decides anything. */
+const seen = { got: 0, ph: "", turn: "" };
+function effects(g) {
+  const got = Object.keys(g.got || {}).length, r = board.getBoundingClientRect();
+  if (g.ph === "turn" && seen.turn === turnKey(g) && got > seen.got) {
+    tone(988, 120); setTimeout(() => tone(1319, 160), 110);
+    if (g.got[net.sessionId] && !myGot) { myGot = "yes"; popConfetti(r.left + r.width / 2, r.top + r.height / 2, 70); } else popConfetti(r.left + r.width / 2, r.top + 20, 14);
+  }
+  if (g.ph === "turn" && seen.turn !== turnKey(g) && g.dr === net.sessionId) { tone(523, 120); setTimeout(() => tone(784, 200), 120); }
+  if (g.ph === "results" && seen.ph !== "results") popConfetti(innerWidth / 2, innerHeight * 0.3, 120);
+  seen.got = got; seen.ph = g.ph; seen.turn = turnKey(g);
+}
+
+function render(g) {
+  const t = Date.now(), n = humans().length;
+  $("net").textContent = ATTRACT ? "" : net.offline ? "Offline: playing with bots" : `Online · ${n} player${n === 1 ? "" : "s"}${isHost() ? " · you run the game" : ""}`;
+  if (!g) return;
+  const span = { lobby: CONFIG.lobbyMs, turn: CONFIG.turnMs, reveal: CONFIG.revealMs, results: CONFIG.resultsMs }[g.ph] || 1, left = Math.max(0, g.endsAt - t);
+  $("clock").style.setProperty("--p", (100 * Math.min(1, left / span)).toFixed(1) + "%");
+  $("clock").textContent = Math.ceil(left / 1000);
+  $("name").hidden = ATTRACT || g.ph !== "lobby";
+  // the word bar
+  const drawer = nameIn(g, g.dr);
+  let word = "";
+  if (g.ph === "lobby") word = `<small>Next game in ${Math.ceil(left / 1000)}s</small>`;
+  else if (g.ph === "turn" && g.dr === net.sessionId && !ATTRACT) word = myWord?.t === turnKey(g) ? `<small>Draw:</small> ${esc(myWord.w.toUpperCase())}` : "<small>Opening your word…</small>";
+  else if (g.ph === "turn") word = [...g.mask].map((c) => (c === " " ? '<span class="sp"></span>' : `<span class="l">${c === "_" ? "&nbsp;" : esc(c.toUpperCase())}</span>`)).join("") + `<small>${g.got[net.sessionId] ? "you got it!" : g.mask.replace(/ /g, "").length + " letters"}</small>`;
+  else if (g.ph === "reveal") word = g.word ? `<small>It was</small> ${esc(g.word.toUpperCase())}` : "<small>Turn over</small>";
+  else word = "<small>Game over</small>";
+  if ($("word").innerHTML !== word) $("word").innerHTML = word;
+  // the board
+  if (g.ph === "turn" || g.ph === "reveal") drawBoard(g.dr === net.sessionId && mine.turn === turnKey(g) ? mine.ink : inkOf(g));
+  else drawBoard("");
+  $("tools").hidden = !iDraw(g);
+  $("board").style.cursor = iDraw(g) ? "crosshair" : "default";
+  let ban = "";
+  if (g.ph === "lobby") ban = `Draw &amp; Guess<small>Take turns drawing a secret word. Guess fast for more points.<br>Starting in ${Math.ceil(left / 1000)}…</small>`;
+  else if (g.ph === "turn" && t - g.at < (ATTRACT ? 900 : 2200)) ban = g.dr === net.sessionId && !ATTRACT ? "Your turn to draw!<small>Don't write the word. Draw it.</small>" : `${esc(drawer)} is drawing<small>Type your guesses below</small>`;
+  else if (g.ph === "turn" && full() && iDraw(g)) ban = "Out of ink!<small>Clear to start over.</small>";
+  else if (g.ph === "reveal") {
+    const right = Object.entries(g.got).sort((a, b) => b[1] - a[1]).map(([id, p]) => `${esc(nameIn(g, id))} +${p}`).join(" · ");
+    ban = g.why === "lost" ? "Turn skipped<small>The word left with the old host.</small>" : g.why === "left" ? `${esc(drawer)} left<small>On to the next drawer.</small>`
+      : `${g.word ? "It was “" + esc(g.word) + "”" : "Time's up"}<small>${right || "Nobody got it."}</small>`;
+  }
+  if ($("banner").dataset.v !== ban) { $("banner").dataset.v = ban; $("banner").innerHTML = ban ? `<div>${ban}</div>` : ""; }
+  // the players
+  const ids = [...new Set([...g.order, ...humans()])].filter((id) => isBot(g, id) || S.entities.players?.[id]);
+  const html = ids.map((id) => ({ id, s: g.scores[id] || 0 })).sort((a, b) => b.s - a.s).map(({ id, s }) =>
+    `<div class="p ${id === net.sessionId ? "me" : ""} ${g.ph === "turn" && g.got[id] ? "got" : ""} ${g.ph === "turn" && g.dr === id ? "dr" : ""}"><span class="av" style="background:${esc(colorIn(g, id))}">${g.ph === "turn" && g.dr === id ? "✎" : g.ph === "turn" && g.got[id] ? "✓" : esc(nameIn(g, id)[0])}</span>${esc(nameIn(g, id))}<span class="s">${s}</span></div>`).join("");
+  if ($("players").innerHTML !== html) $("players").innerHTML = html;
+  // the chat
+  const c = parse(S.shared.chat, { l: [] }), chatHtml = (c.g === g.id ? c.l : []).map(([n, col, text, kind]) =>
+    kind === "sys" ? `<div class="sys">${esc(text)}</div>` : `<div class="${kind}"><b style="color:${esc(col)}">${esc(n)}</b>${esc(text)}</div>`).join("") || '<div class="sys">Guesses show up here.</div>';
+  if ($("chat").dataset.v !== chatHtml) { $("chat").dataset.v = chatHtml; $("chat").innerHTML = chatHtml; $("chat").scrollTop = 1e6; }
+  const canGuess = !(g.ph === "turn" && (g.dr === net.sessionId || g.got[net.sessionId]));
+  $("guess").placeholder = !canGuess ? (g.dr === net.sessionId ? "You're drawing!" : "You got it! Wait for the others…") : g.ph === "turn" ? "Type your guess…" : "Say something…";
+  $("guess").disabled = !canGuess; $("say").hidden = ATTRACT;
+  renderOver(g);
+}
+
+let boardFor = -1, lb = null;
+function renderOver(g) {
+  $("over").hidden = g.ph !== "results";
+  if (g.ph !== "results") return;
+  const ranked = [...new Set([...g.order, ...Object.keys(g.scores)])].map((id) => ({ id, s: g.scores[id] || 0 })).sort((a, b) => b.s - a.s);
+  $("oTitle").textContent = ranked[0] && ranked[0].s ? (ranked[0].id === net.sessionId ? "You win!" : `${nameIn(g, ranked[0].id)} wins!`) : "Game over";
+  const html = ranked.map((r, i) => `<li style="${r.id === net.sessionId ? "font-weight:800" : ""}">${["🥇", "🥈", "🥉"][i] || ""} ${esc(nameIn(g, r.id))}<span>${r.s}</span></li>`).join("");
+  if ($("ranks").innerHTML !== html) $("ranks").innerHTML = html;
+  $("oNext").textContent = `Next game in ${Math.max(0, Math.ceil((g.endsAt - Date.now()) / 1000))}s`;
+  $("again").textContent = g.ready.includes(net.sessionId) ? "Ready ✓" : "Play again";
+  if (boardFor === g.id) return;
+  boardFor = g.id;
+  const list = $("board10"), score = g.scores[net.sessionId] || 0;
+  if (!lb) { list.innerHTML = "<li>Leaderboards need a connection.</li>"; return; }
+  list.innerHTML = "<li>Loading…</li>";
+  (score > 0 ? lb.submit(score).catch(() => null) : Promise.resolve()).then(() => lb.top(10)).then(({ entries }) => {
+    list.innerHTML = entries.length ? entries.map((e) => `<li>${esc(e.username || "Player")}<span>${e.score}</span></li>`).join("") : "<li>No scores yet. Win one.</li>";
+  }).catch(() => { list.innerHTML = "<li>Couldn't load the leaderboard.</li>"; });
+}
+
+/** Two players picked one color (they joined at once): the later sessionId picks another. */
+function fixColor() {
+  const ps = S.entities.players || {};
+  if (!Object.entries(ps).some(([id, p]) => id < net.sessionId && p.c === myColor)) return;
+  const taken = new Set(Object.entries(ps).filter(([id]) => id !== net.sessionId).map(([, p]) => p.c));
+  myColor = COLORS.find((c) => !taken.has(c)) || pick(COLORS);
+  net.me.set("c", myColor);
+}
+
+// ── INPUT ───────────────────────────────────────────────────────────────────────────
+board.addEventListener("pointerdown", (e) => { unlockAudio(); penDown(e); });
+board.addEventListener("pointermove", penMove);
+for (const ev of ["pointerup", "pointercancel"]) board.addEventListener(ev, penUp);
+$("clear").addEventListener("click", clearBoard);
+$("say").addEventListener("submit", (e) => {
+  e.preventDefault(); unlockAudio();
+  const text = $("guess").value.trim();
+  $("guess").value = "";
+  if (text) sendGuess(text);
+});
+$("again").addEventListener("click", () => { if (isHost()) onReady(net.sessionId); else net.send("ready", { r: 1 }); });
+$("name").addEventListener("change", () => {
+  myName = $("name").value.trim().slice(0, 14) || myName;
+  try { localStorage.setItem("mpa-name", myName); } catch {}
+  net && net.me.set("n", myName);
+});
+document.addEventListener("touchmove", (e) => { if (!e.target.closest("#chat, .card")) e.preventDefault(); }, { passive: false });
+
+// ── MAIN LOOP ───────────────────────────────────────────────────────────────────────
+let last = performance.now(), lastHb = 0, lastRender = 0;
+function frame(now) {
+  const dt = Math.min(0.05, (now - last) / 1000); last = now;
+  if (now - lastHb > 1000) { lastHb = now; net.me.set("hb", Date.now()); }
+  watchHost();
+  if (isHost()) hostTick(); else host.was = false;
+  const g = game();
+  if (g) { myTick(g); effects(g); if (g.ph === "lobby") fixColor(); }
+  if (now - lastRender > 80) { lastRender = now; render(g); }
+  else if (g && g.dr === net.sessionId && mine.drawing) drawBoard(mine.ink); // my own pen, every frame
+  drawFx(dt);
+  requestAnimationFrame(frame);
+}
+
+(async function start() {
+  if (ATTRACT) Object.assign(CONFIG, { lobbyMs: 300, turnMs: 9000, revealMs: 2600, resultsMs: 5000, botGuessAt: [0.35, 0.8], botSkill: 0.85, botDrawShare: 0.6, hintAt: [0.3, 0.55, 0.75] });
+  net = await connect();
+  net.onState((st) => { S = st; });
+  net.onDisconnect(() => { $("net").textContent = "Reconnecting…"; });
+  net.on("guess", async (msg, from) => { // sealed to the host: only the host can open it
+    if (!msg || msg.to !== net.sessionId || !isHost()) return;
+    const v = await Seal.open(pkOf(from), msg.box);
+    if (v) onGuess(from, v.w);
+  });
+  net.on("word", async (msg, from) => { // the drawer's word, re-sent to a new host
+    if (!msg || msg.to !== net.sessionId) return;
+    const v = await Seal.open(pkOf(from), msg.box);
+    if (!v) return;
+    heardWord = v;
+    const g = game();
+    if (isHost() && g && g.ph === "turn" && g.dr === from && v.t === turnKey(g)) host.word = v.w;
+  });
+  net.on("who", (msg, from) => resendWord(from));
+  net.on("ready", (msg, from) => { if (isHost()) onReady(from); });
+  if (!net.offline && typeof MP !== "undefined") lb = MP.auth({ key: MP_CONNECT.key, apiUrl: MP_CONNECT.apiUrl }).leaderboard(CONFIG.board);
+  const pk = await Seal.init().catch(() => "");
+  const taken = new Set(Object.entries(S.entities.players || {}).filter(([id]) => id !== net.sessionId).map(([, p]) => p.c));
+  myColor = COLORS.find((c) => !taken.has(c)) || pick(COLORS);
+  $("name").value = myName;
+  net.me.set({ n: myName, c: myColor, hb: Date.now(), pk });
+  fit();
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

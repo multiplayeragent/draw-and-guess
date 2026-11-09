@@ -1,0 +1,21 @@
+{
+  "name": "Draw & Guess",
+  "genre": "party",
+  "dim": "2D",
+  "mode": "Party",
+  "players": "3–10",
+  "hook": "One player draws. Everyone else guesses.",
+  "how": "Take turns drawing a secret word in 60 seconds. Everyone else types guesses, and faster right guesses score more. Letters show up as time runs out.",
+  "controls": "Mouse or finger to draw, type to guess",
+  "uses": [
+    ["Hidden info", "The word is sealed so only the drawer can read it (the host picks it, so it can too)."],
+    ["Host-run rounds", "The host's browser picks the drawer and the word, checks guesses and keeps score; if it leaves, the next player takes over."],
+    ["Bots", "Bots draw simple doodles and guess, sometimes right."],
+    ["Leaderboard", "Each player's best game, in points."]
+  ],
+  "ideas": [
+    "Add a word pack about movies",
+    "Add colors and an eraser",
+    "Let players vote on the best drawing"
+  ]
+}
