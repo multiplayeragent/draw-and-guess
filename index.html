@@ -390,7 +390,7 @@ async function nextTurn(g) {
   host.busy = true;
   try {
     let ti = g.ti, dr = "";
-    while (++ti < g.order.length * CONFIG.rounds) { const id = g.order[ti % g.order.length]; if (isBot(g, id) || (S.entities.players?.[id] && (pkOf(id) || !Seal.on))) { dr = id; break; } } // a player with no key yet is skipped, so the word is never sent in the clear
+    while (++ti < g.order.length * CONFIG.rounds) { const id = g.order[ti % g.order.length]; if (isBot(g, id) || (livePlayers().includes(id) && (pkOf(id) || !Seal.on))) { dr = id; break; } } // a player with no key yet (or gone quiet) is skipped, so the word is never sent in the clear
     if (!dr) { patch({ ph: "results", endsAt: Date.now() + CONFIG.resultsMs, word: "", ready: [] }); return; }
     const bot = isBot(g, dr), pool = (bot ? Object.keys(DOODLES) : WORDS).filter((w) => !host.used.has(w)), word = pick(pool.length ? pool : WORDS);
     const t = `${g.id}.${ti}`, box = bot ? "" : await Seal.seal(pkOf(dr), { t, w: word });
@@ -416,7 +416,7 @@ function turnTick(g, t) {
   botGuesses(g, t);
   g = game();
   const guessers = [...humans(), ...g.bots.map((b) => b.i)].filter((id) => id !== g.dr);
-  const drawerGone = !isBot(g, g.dr) && !S.entities.players?.[g.dr];
+  const drawerGone = !isBot(g, g.dr) && !livePlayers().includes(g.dr); // left, or its tab died (no heartbeat for 3s)
   if (t >= g.endsAt || drawerGone || (guessers.length && guessers.every((id) => g.got[id]))) endTurn(g, drawerGone ? "left" : "");
 }
 function endTurn(g, why) {
@@ -473,6 +473,7 @@ function botGuesses(g, t) {
       for (let k = Math.floor(rnd(1, 3.5)); k > 0; k--) acts.push({ i: b.i, at: g.at + rnd(0.12, 0.95) * ((right ? at : g.endsAt) - g.at), w: pick(Math.random() < 0.6 ? WORDS.filter((w) => w !== host.word) : SILLY) });
       if (right) acts.push({ i: b.i, at, w: host.word });
     }
+    for (const a of acts) if (a.at < t && a.w !== host.word) a.done = true; // a new host mid-turn: skip the wrong guesses already past, no burst
     host.plan = { key: turnKey(g), acts };
   }
   const blank = !isBot(g, g.dr) && inkOf(g).length < 120; // nothing drawn yet: nothing to guess from
@@ -617,9 +618,10 @@ function effects(g) {
   seen.got = got; seen.ph = g.ph; seen.turn = turnKey(g);
 }
 
+let dropped = false; // true while the connection is down: the HUD keeps showing "Reconnecting…"
 function render(g) {
   const t = Date.now(), n = humans().length;
-  $("net").textContent = ATTRACT ? "" : net.offline ? "Offline: playing with bots" : `Online · ${n} player${n === 1 ? "" : "s"}${isHost() ? " · you run the game" : ""}`;
+  $("net").textContent = ATTRACT ? "" : net.offline ? "Offline: playing with bots" : dropped ? "Reconnecting…" : `Online · ${n} player${n === 1 ? "" : "s"}${isHost() ? " · you run the game" : ""}`;
   if (!g) return;
   const span = { lobby: CONFIG.lobbyMs, turn: CONFIG.turnMs, reveal: CONFIG.revealMs, results: CONFIG.resultsMs }[g.ph] || 1, left = Math.max(0, g.endsAt - t);
   $("clock").style.setProperty("--p", (100 * Math.min(1, left / span)).toFixed(1) + "%");
@@ -650,7 +652,7 @@ function render(g) {
   }
   if ($("banner").dataset.v !== ban) { $("banner").dataset.v = ban; $("banner").innerHTML = ban ? `<div>${ban}</div>` : ""; }
   // the players
-  const ids = [...new Set([...g.order, ...humans()])].filter((id) => isBot(g, id) || S.entities.players?.[id]);
+  const live = livePlayers(), ids = [...new Set([...g.order, ...humans()])].filter((id) => isBot(g, id) || live.includes(id));
   const html = ids.map((id) => ({ id, s: g.scores[id] || 0 })).sort((a, b) => b.s - a.s).map(({ id, s }) =>
     `<div class="p ${id === net.sessionId ? "me" : ""} ${g.ph === "turn" && g.got[id] ? "got" : ""} ${g.ph === "turn" && g.dr === id ? "dr" : ""}"><span class="av" style="background:${esc(colorIn(g, id))}">${g.ph === "turn" && g.dr === id ? "✎" : g.ph === "turn" && g.got[id] ? "✓" : esc(nameIn(g, id)[0])}</span>${esc(nameIn(g, id))}<span class="s">${s}</span></div>`).join("");
   if ($("players").innerHTML !== html) $("players").innerHTML = html;
@@ -684,11 +686,11 @@ function renderOver(g) {
   }).catch(() => { list.innerHTML = "<li>Couldn't load the leaderboard.</li>"; });
 }
 
-/** Two players picked one color (they joined at once): the later sessionId picks another. */
+/** Two players picked one color (they joined at once): the later sessionId picks another. Bots' colors count as taken. */
 function fixColor() {
-  const ps = S.entities.players || {};
-  if (!Object.entries(ps).some(([id, p]) => id < net.sessionId && p.c === myColor)) return;
-  const taken = new Set(Object.entries(ps).filter(([id]) => id !== net.sessionId).map(([, p]) => p.c));
+  const ps = S.entities.players || {}, botColors = (game()?.bots || []).map((b) => b.c);
+  if (!Object.entries(ps).some(([id, p]) => id < net.sessionId && p.c === myColor) && !botColors.includes(myColor)) return;
+  const taken = new Set([...Object.entries(ps).filter(([id]) => id !== net.sessionId).map(([, p]) => p.c), ...botColors]);
   myColor = COLORS.find((c) => !taken.has(c)) || pick(COLORS);
   net.me.set("c", myColor);
 }
@@ -715,12 +717,12 @@ document.addEventListener("touchmove", (e) => { if (!e.target.closest("#chat, .c
 // ── MAIN LOOP ───────────────────────────────────────────────────────────────────────
 let last = performance.now(), lastHb = 0, lastRender = 0;
 function frame(now) {
-  const dt = Math.min(0.05, (now - last) / 1000); last = now;
-  if (now - lastHb > 1000) { lastHb = now; net.me.set("hb", Date.now()); }
+  const dt = Math.max(0, Math.min(0.05, (now - last) / 1000)); last = now; // never negative: the first frame can be stamped before `last`
+  if (now - lastHb > 1000) { lastHb = now; net.me.set("hb", Date.now()); fixColor(); }
   watchHost();
   if (isHost()) hostTick(); else host.was = false;
   const g = game();
-  if (g) { myTick(g); effects(g); if (g.ph === "lobby") fixColor(); }
+  if (g) { myTick(g); effects(g); }
   if (now - lastRender > 80) { lastRender = now; render(g); }
   else if (g && g.dr === net.sessionId && mine.drawing) drawBoard(mine.ink); // my own pen, every frame
   drawFx(dt);
@@ -731,7 +733,8 @@ function frame(now) {
   if (ATTRACT) Object.assign(CONFIG, { lobbyMs: 300, turnMs: 9000, revealMs: 2600, resultsMs: 5000, botGuessAt: [0.35, 0.8], botSkill: 0.85, botDrawShare: 0.6, hintAt: [0.3, 0.55, 0.75] });
   net = await connect();
   net.onState((st) => { S = st; });
-  net.onDisconnect(() => { $("net").textContent = "Reconnecting…"; });
+  net.onDisconnect(() => { dropped = true; $("net").textContent = "Reconnecting…"; });
+  net.onReconnect(() => { dropped = false; });
   net.on("guess", async (msg, from) => { // sealed to the host: only the host can open it
     if (!msg || msg.to !== net.sessionId || !isHost()) return;
     const v = await Seal.open(pkOf(from), msg.box);
@@ -749,7 +752,7 @@ function frame(now) {
   net.on("ready", (msg, from) => { if (isHost()) onReady(from); });
   if (!net.offline && typeof MP !== "undefined") lb = MP.auth({ key: MP_CONNECT.key, apiUrl: MP_CONNECT.apiUrl }).leaderboard(CONFIG.board);
   const pk = await Seal.init().catch(() => "");
-  const taken = new Set(Object.entries(S.entities.players || {}).filter(([id]) => id !== net.sessionId).map(([, p]) => p.c));
+  const taken = new Set([...Object.entries(S.entities.players || {}).filter(([id]) => id !== net.sessionId).map(([, p]) => p.c), ...(game()?.bots || []).map((b) => b.c)]);
   myColor = COLORS.find((c) => !taken.has(c)) || pick(COLORS);
   $("name").value = myName;
   net.me.set({ n: myName, c: myColor, hb: Date.now(), pk });
