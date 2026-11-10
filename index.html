@@ -258,7 +258,8 @@ const Seal = {
   },
   /** Seal any JSON value so only the holder of `toPub` (and you) can open it. */
   async seal(toPub, value) {
-    if (!this.on || !toPub || !this.pair) return "p:" + JSON.stringify(value);
+    if (!this.on) return "p:" + JSON.stringify(value);
+    if (!toPub || !this.pair) return ""; // never plaintext online: nobody can open an empty box
     const iv = crypto.getRandomValues(new Uint8Array(12));
     const ct = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, await this.key(toPub), new TextEncoder().encode(JSON.stringify(value)));
     return b64(iv) + "." + b64(ct);
@@ -389,7 +390,7 @@ async function nextTurn(g) {
   host.busy = true;
   try {
     let ti = g.ti, dr = "";
-    while (++ti < g.order.length * CONFIG.rounds) { const id = g.order[ti % g.order.length]; if (isBot(g, id) || S.entities.players?.[id]) { dr = id; break; } }
+    while (++ti < g.order.length * CONFIG.rounds) { const id = g.order[ti % g.order.length]; if (isBot(g, id) || (S.entities.players?.[id] && (pkOf(id) || !Seal.on))) { dr = id; break; } } // a player with no key yet is skipped, so the word is never sent in the clear
     if (!dr) { patch({ ph: "results", endsAt: Date.now() + CONFIG.resultsMs, word: "", ready: [] }); return; }
     const bot = isBot(g, dr), pool = (bot ? Object.keys(DOODLES) : WORDS).filter((w) => !host.used.has(w)), word = pick(pool.length ? pool : WORDS);
     const t = `${g.id}.${ti}`, box = bot ? "" : await Seal.seal(pkOf(dr), { t, w: word });
