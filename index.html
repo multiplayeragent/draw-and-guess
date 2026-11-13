@@ -24,7 +24,7 @@
   #stage { flex: 1; min-width: 0; display: flex; align-items: center; justify-content: center; position: relative; }
   #board { background: #fffdf8; border-radius: 16px; box-shadow: 0 8px 0 #2a214014, 0 0 0 3px #2a21401a; touch-action: none; cursor: crosshair; display: block; }
   #tools { position: absolute; right: 10px; bottom: 10px; display: flex; gap: 8px; }
-  #tools button, button.go { min-height: 44px; border: 0; border-radius: 12px; padding: 0 16px; font: 800 15px system-ui, sans-serif; cursor: pointer; }
+  #tools button, button.go, #say button { min-height: 44px; border: 0; border-radius: 12px; padding: 0 16px; font: 800 15px system-ui, sans-serif; cursor: pointer; }
   #tools button { background: var(--ink); color: #fff; }
   #banner { position: absolute; inset: 0; display: grid; place-items: center; pointer-events: none; text-align: center; }
   #banner div { background: #2a2140e6; color: #fff; padding: 16px 22px; border-radius: 16px; font-weight: 900; font-size: clamp(20px, 3.6vw, 32px); max-width: 80%; }
@@ -45,6 +45,7 @@
   #over { position: fixed; inset: 0; display: grid; place-items: center; background: #2a214080; padding: 16px; }
   .card { width: min(380px, 92vw); max-height: 92vh; overflow: auto; box-sizing: border-box; background: var(--card); border-radius: 20px; padding: 18px; text-align: center; box-shadow: 0 20px 60px #2a214055; }
   .card h2 { margin: 0 0 4px; font-size: 26px; } .card ol { text-align: left; padding-left: 26px; margin: 10px 0; font-size: 14px; } .card li span { float: right; }
+  .card li.note { list-style: none; margin-left: -26px; text-align: center; color: var(--dim); } /* a message, not a ranked row */
   .card h3 { margin: 10px 0 0; font-size: 13px; color: var(--dim); text-transform: uppercase; letter-spacing: .08em; }
   #oNext { color: var(--dim); font-size: 13px; margin-top: 6px; }
   @media (max-width: 760px) {
@@ -71,7 +72,7 @@
 <canvas id="fx"></canvas>
 <div id="over" hidden><div class="card">
   <h2 id="oTitle"></h2><ol id="ranks"></ol>
-  <h3>Best games ever</h3><ol id="board10"><li>Loading the leaderboard…</li></ol>
+  <h3>Best games ever</h3><ol id="board10"><li class="note">Loading the leaderboard…</li></ol>
   <button class="go" id="again">Play again</button><div id="oNext"></div>
 </div></div>
 <script>
@@ -351,7 +352,12 @@ const pick = (a) => a[Math.floor(Math.random() * a.length)];
 const shuffle = (a) => { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
 const maskOf = (word, shown) => [...word].map((ch, i) => (ch === " " ? " " : shown.includes(i) ? ch : "_")).join("");
 const squash = (s) => String(s).toLowerCase().replace(/[^a-z]/g, "");
-const isRight = (text, word) => !!word && squash(text).includes(squash(word));
+/** Right if the guess is the word (spaces and case ignored) or has it as a whole word, plural ok: "cat" is not "category". */
+function isRight(text, word) {
+  if (!word) return false;
+  const words = " " + String(text).toLowerCase().replace(/[^a-z]+/g, " ") + " ", w = String(word).toLowerCase();
+  return squash(text) === squash(word) || words.includes(" " + w + " ") || words.includes(" " + w + "s ");
+}
 
 /** Become host: carry on from state. The word comes back from the drawer, or the turn ends. */
 function adopt() {
@@ -680,11 +686,11 @@ function renderOver(g) {
   if (boardFor === g.id) return;
   boardFor = g.id;
   const list = $("board10"), score = g.scores[net.sessionId] || 0;
-  if (!lb) { list.innerHTML = "<li>Leaderboards need a connection.</li>"; return; }
-  list.innerHTML = "<li>Loading…</li>";
+  if (!lb) { list.innerHTML = "<li class='note'>Leaderboards need a connection.</li>"; return; }
+  list.innerHTML = "<li class='note'>Loading…</li>";
   (score > 0 ? lb.submit(score).catch(() => null) : Promise.resolve()).then(() => lb.top(10)).then(({ entries }) => {
-    list.innerHTML = entries.length ? entries.map((e) => `<li>${esc(e.username || "Player")}<span>${e.score}</span></li>`).join("") : "<li>No scores yet. Win one.</li>";
-  }).catch(() => { list.innerHTML = "<li>Couldn't load the leaderboard.</li>"; });
+    list.innerHTML = entries.length ? entries.map((e) => `<li>${esc(e.username || "Player")}<span>${e.score}</span></li>`).join("") : "<li class='note'>No scores yet. Win one.</li>";
+  }).catch(() => { list.innerHTML = "<li class='note'>Couldn't load the leaderboard.</li>"; });
 }
 
 /** Two players picked one color (they joined at once): the later sessionId picks another. Bots' colors count as taken. */
@@ -699,6 +705,7 @@ function fixColor() {
 // ── INPUT ───────────────────────────────────────────────────────────────────────────
 board.addEventListener("pointerdown", (e) => { unlockAudio(); penDown(e); });
 board.addEventListener("pointermove", penMove);
+board.addEventListener("contextmenu", (e) => e.preventDefault()); // right-click never opens the browser menu over the board
 for (const ev of ["pointerup", "pointercancel"]) board.addEventListener(ev, penUp);
 $("clear").addEventListener("click", clearBoard);
 $("say").addEventListener("submit", (e) => {
